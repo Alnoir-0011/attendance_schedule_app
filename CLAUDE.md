@@ -119,17 +119,22 @@ npx prisma studio           # データ確認
 - Vitest の設定は `vitest.config.mts`（**拡張子 `.mts` 必須**。`package.json` に `"type": "module"` がないため、`.ts` だと CJS 読み込みになり ESM 専用依存（std-env 4）で起動エラーになる）。
 - ユニットテストは `**/*.test.{ts,tsx}`（`e2e/` は除外）、E2E は `e2e/**/*.spec.ts` に配置する。
 - React コンポーネントのユニットテスト環境（jsdom / `@testing-library/react` 等）は**未導入**。コンポーネントテストを書く際は先にこれらを導入し、`vitest.config.mts` に `environment` を設定すること。
-- Playwright は chromium のみ・`reporter: "list"`（HTML レポートサーバーを自動起動しない）。`webServer` 設定により `npm run test:e2e` だけで dev サーバーが起動・終了する。
+- Playwright は chromium のみ・`reporter: "list"`（HTML レポートサーバーを自動起動しない）。`webServer` 設定により `npm run test:e2e` だけでサーバーが起動・終了する（ローカルは `npm run dev`、CI ではビルド済みの `npm run start` を使用）。
 
 ## CI（GitHub Actions）
 
-`.github/workflows/ci.yml` で main への push と Pull Request 時に以下を実行する:
+`.github/workflows/ci.yml` で main への push と Pull Request 時に、以下の4ジョブを実行する:
 
-1. `npm run lint` / `npm run format:check` / `npm run test`（ユニット）
-2. `npm run build`（本番ビルド）
-3. `npm run test:e2e`（Playwright・chromium。失敗時は `test-results/` をアーティファクトとして保存）
+| ジョブ      | 内容                                                                                      |
+| ----------- | ----------------------------------------------------------------------------------------- |
+| `lint`      | `npm run lint` / `npm run format:check`                                                   |
+| `unit-test` | `npm run test`（Vitest）                                                                  |
+| `build`     | `npm run build`。`.next`（cache 除く）をアーティファクト `next-build` としてアップロード  |
+| `e2e`       | `build` に依存。`next-build` をダウンロードし `next start` 起動で `npm run test:e2e` 実行 |
 
-Node のバージョンは `.node-version` を参照する。CI を通らない変更はマージしない。
+- `lint` / `unit-test` / `build` は並列実行。`e2e` のみ `build` 完了後に実行される。
+- E2E 失敗時は `test-results/` がアーティファクトとして保存される。
+- Node のバージョンは `.node-version` を参照する。CI を通らない変更はマージしない。
 
 ## 規約・注意点
 

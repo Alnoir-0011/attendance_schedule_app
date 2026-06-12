@@ -17,7 +17,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    // CI ではビルド済みの本番サーバーを使う（事前に npm run build が必要）
+    command: process.env.CI ? "npm run start" : "npm run dev",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
