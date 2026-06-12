@@ -1,0 +1,126 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum CompanyDayType {
+  OFFICE_DAY
+  HOLIDAY
+}
+
+// ----- Better Auth 管理テーブル（公式スキーマ準拠） -----
+
+model User {
+  id            String   @id
+  name          String
+  email         String
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // アプリ拡張フィールド
+  role               Role    @default(MEMBER)
+  hasKey             Boolean @default(false)
+  dailyTransportCost Int     @default(0)
+  transportCostLimit Int     @default(0)
+  notifyEmail        Boolean @default(false)
+  notifySlack        Boolean @default(false)
+
+  sessions       Session[]
+  accounts       Account[]
+  attendanceDays AttendanceDay[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+  @@index([identifier])
+}
+
+// ----- アプリ固有テーブル -----
+
+// 出社表明（日付はタイムゾーンを持たない日付として保持。判定は JST 基準）
+
+model AttendanceDay {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  comment   String?  @db.VarChar(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@map("attendance_day")
+}
+
+// 会社カレンダー（出社日 / 休日マスタ）
+
+model CompanyDay {
+  id        String         @id @default(cuid())
+  date      DateTime       @unique @db.Date
+  type      CompanyDayType
+  label     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@map("company_day")
+}
