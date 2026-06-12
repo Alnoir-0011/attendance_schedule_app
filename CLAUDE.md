@@ -140,7 +140,8 @@ npx prisma generate         # クライアント生成（npm install 時に post
 - `lib/auth.ts` が本体設定。Server Actions から signIn/signOut するため **`nextCookies()` プラグインを必ず plugins の最後に置く**。
 - ログイン/ログアウトは `lib/actions/auth.ts` の Server Action（`auth.api.signInEmail` / `signOut`）で行う。クライアント SDK は未使用。
 - サーバー側ガードは `lib/session.ts`: `requireAuth()`（未認証→`/login`）/ `requireAdmin()`（ADMIN 以外→`/`）。React の `cache()` でリクエスト内メモ化済み。
-- `proxy.ts`（Next.js 16 の命名。旧 middleware.ts は非推奨。<https://nextjs.org/docs/app/api-reference/file-conventions/proxy> 参照）は **Cookie の有無による楽観的ガードのみ**。ロール判定・改ざん検証はサーバー側ガードが担う。ログイン済みで `/login` に来た場合は `/` へ戻す。
+- `proxy.ts`（Next.js 16 の命名。旧 middleware.ts は非推奨。<https://nextjs.org/docs/app/api-reference/file-conventions/proxy> 参照）は **Cookie の有無による楽観的ガードのみ**。ロール判定・改ざん検証はサーバー側ガードが担う。
+- **proxy で「Cookie があれば `/login` → `/` へ戻す」をやってはいけない**。Cookie の存在はセッションの有効性を保証せず、無効な Cookie（シード再投入・セッション失効後の残留）があるとサーバー側ガードとの間で無限リダイレクトループになる。ログイン済みユーザーを `/login` から戻す処理はログインページ側（`getSession` で検証してから `redirect("/")`）で行う。
 - 権限判定ロジックは `lib/authz.ts`（`isAdmin`）に置き、ユニットテスト対象にする。
 - リダイレクト先は固定パスのみ。**「ログイン後に元のページへ戻す」（`?next=` 等）を実装する場合は、オープンリダイレクト防止のためサーバー側で遷移先を必ず検証する**こと。
 - アプリ独自の `/api/` ルートハンドラを追加する場合は、proxy 任せにせず**ハンドラ自身でサーバー側の認証チェックを行う**こと（proxy の除外対象は `/api/auth/` 配下のみ）。
