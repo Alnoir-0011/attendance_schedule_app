@@ -145,6 +145,16 @@ npx prisma generate         # クライアント生成（npm install 時に post
 - リダイレクト先は固定パスのみ。**「ログイン後に元のページへ戻す」（`?next=` 等）を実装する場合は、オープンリダイレクト防止のためサーバー側で遷移先を必ず検証する**こと。
 - アプリ独自の `/api/` ルートハンドラを追加する場合は、proxy 任せにせず**ハンドラ自身でサーバー側の認証チェックを行う**こと（proxy の除外対象は `/api/auth/` 配下のみ）。
 
+## カレンダー（FullCalendar）
+
+- `components/attendance-calendar.tsx`（client）が本体。データ取得は `lib/actions/attendance.ts` の Server Action（`getCalendarData` / `registerAttendance` / `cancelAttendance`）。
+- 日付は文字列 `"YYYY-MM-DD"` でクライアント⇔サーバーを受け渡し、サーバー側で `@db.Date` 相当（UTC 0時の Date）に変換する。
+- データ取得は FullCalendar の **visible range 単位**（`datesSet` で前後月の表示分も含めて取得）。登録/取消後は保持している範囲で再取得する。
+- イベント変換・コメント検証などの**純粋ロジックは `lib/attendance.ts`** に置き、ユニットテスト対象にする（UI やアクションに直接書かない）。
+- 登録は upsert（既存なら**内容更新**として動作）、取消は deleteMany（未登録なら何もしない）。
+- 出社・退社の予定時刻は**各々任意**（片方のみ可）。`AttendanceDay.startTime` / `endTime` に `"HH:mm"` 文字列（**30分刻み**）で保持し、検証はアプリ層（`validateTimeRange`）で行う。両方指定時は出社 < 退社。表示は `formatTimeRange`（`9:00〜17:30` / `10:00〜` / `〜16:00`）。
+- E2E（`e2e/calendar.spec.ts`）はシードが使っていない日（20・25・26日）をテストごとに分けて使い、**変更したデータはテスト内で取り消して復元**する。シードの出社日は 2・9・16・24 日、休日は 20 日。E2E がログインする 在宅 次郎（member2）の登録は **9日のみ**。
+
 ## DB（Neon + Prisma）
 
 - Neon プロジェクト: `attendance_schedule_app-db`（Vercel 連携の組織配下）。開発用は `main` ブランチ、テスト用は `test` ブランチ。
