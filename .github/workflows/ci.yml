@@ -109,6 +109,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: build
+    # E2E 専用の共有 DB（Neon e2e ブランチ）を使うため、同時実行を直列化する
+    concurrency:
+      group: e2e-db
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
@@ -120,6 +124,23 @@ jobs:
       - name: 依存関係のインストール
         run: npm ci
 
+      - name: .env を作成（E2E 用 DB）
+        run: |
+          {
+            echo "DATABASE_URL=\"${{ secrets.E2E_DATABASE_URL }}\""
+            echo "DIRECT_URL=\"${{ secrets.E2E_DIRECT_URL }}\""
+            echo "BETTER_AUTH_SECRET=\"ci-e2e-only-secret-0123456789abcdef0123456789abcdef\""
+            echo "BETTER_AUTH_URL=\"http://localhost:3000\""
+          } > .env
+
+      # 注意: E2E テストは全テストがこのシード状態を共有する。
+      # データを書き換えるテスト（出社登録など）を追加する際は、
+      # テスト間の干渉（並列実行・シード前提の崩れ）に注意すること。
+      - name: マイグレーション適用とシード投入
+        run: npx prisma migrate deploy && npx prisma db seed
+
+      # checkout 直後のため .next は存在しない前提。
+      # このジョブ内で build を実行する変更を入れる場合はパス衝突に注意
       - name: ビルド成果物をダウンロード
         uses: actions/download-artifact@v4
         with:
