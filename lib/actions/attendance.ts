@@ -6,7 +6,9 @@ import {
   type AttendanceItem,
   type CompanyDayItem,
 } from "@/lib/attendance";
+import { mergeCompanyDays } from "@/lib/company-calendar";
 import { parseDateString, toDateString } from "@/lib/date";
+import { listHolidaysInRange } from "@/lib/holidays";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 
@@ -36,7 +38,7 @@ export async function getCalendarData(
     throw new Error("不正な取得範囲です");
   }
 
-  const [attendances, companyDays] = await Promise.all([
+  const [attendances, companyDays, weekdayRules] = await Promise.all([
     prisma.attendanceDay.findMany({
       where: { date: { gte: start, lt: end } },
       include: { user: { select: { name: true, hasKey: true } } },
@@ -44,6 +46,9 @@ export async function getCalendarData(
     }),
     prisma.companyDay.findMany({
       where: { date: { gte: start, lt: end } },
+    }),
+    prisma.companyWeekdayRule.findMany({
+      select: { weekday: true, type: true, label: true },
     }),
   ]);
 
@@ -58,11 +63,18 @@ export async function getCalendarData(
       userName: a.user.name,
       hasKey: a.user.hasKey,
     })),
-    companyDays: companyDays.map((c) => ({
-      date: toDateString(c.date),
-      type: c.type,
-      label: c.label,
-    })),
+    // 個別指定 ＞ 祝日 ＞ 曜日ルール の優先順位でマージした有効な会社カレンダー
+    companyDays: mergeCompanyDays({
+      start: startStr,
+      end: endStr,
+      companyDays: companyDays.map((c) => ({
+        date: toDateString(c.date),
+        type: c.type,
+        label: c.label,
+      })),
+      holidays: listHolidaysInRange(startStr, endStr),
+      weekdayRules,
+    }),
   };
 }
 

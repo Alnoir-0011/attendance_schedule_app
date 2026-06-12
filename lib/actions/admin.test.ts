@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createUser,
   deleteCompanyDay,
+  deleteWeekdayRule,
   getAdminUsers,
   getCompanyDays,
+  getWeekdayRules,
   resetUserPassword,
   saveCompanyDay,
+  saveWeekdayRule,
   updateUser,
 } from "@/lib/actions/admin";
 import { auth } from "@/lib/auth";
@@ -24,6 +27,11 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
     },
     companyDay: {
+      findMany: vi.fn(),
+      upsert: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    companyWeekdayRule: {
       findMany: vi.fn(),
       upsert: vi.fn(),
       deleteMany: vi.fn(),
@@ -84,6 +92,12 @@ describe("管理系 Action の権限チェック", () => {
       () => saveCompanyDay({ date: "2026-06-21", type: "HOLIDAY", label: "" }),
     ],
     ["deleteCompanyDay", () => deleteCompanyDay("2026-06-21")],
+    ["getWeekdayRules", () => getWeekdayRules()],
+    [
+      "saveWeekdayRule",
+      () => saveWeekdayRule({ weekday: 3, type: "OFFICE_DAY", label: "" }),
+    ],
+    ["deleteWeekdayRule", () => deleteWeekdayRule(3)],
   ];
 
   it.each(actions)(
@@ -98,6 +112,9 @@ describe("管理系 Action の権限チェック", () => {
       expect(prisma.companyDay.findMany).not.toHaveBeenCalled();
       expect(prisma.companyDay.upsert).not.toHaveBeenCalled();
       expect(prisma.companyDay.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.companyWeekdayRule.findMany).not.toHaveBeenCalled();
+      expect(prisma.companyWeekdayRule.upsert).not.toHaveBeenCalled();
+      expect(prisma.companyWeekdayRule.deleteMany).not.toHaveBeenCalled();
       expect(auth.api.createUser).not.toHaveBeenCalled();
       expect(auth.api.setUserPassword).not.toHaveBeenCalled();
       expect(auth.api.revokeUserSessions).not.toHaveBeenCalled();
@@ -277,5 +294,69 @@ describe("deleteCompanyDay", () => {
     expect(prisma.companyDay.deleteMany).toHaveBeenCalledWith({
       where: { date: new Date("2026-06-21T00:00:00Z") },
     });
+  });
+});
+
+describe("saveWeekdayRule", () => {
+  it("曜日・種別・ラベルで upsert する（同一曜日は上書き・ラベル空文字は null）", async () => {
+    const result = await saveWeekdayRule({
+      weekday: 3,
+      type: "OFFICE_DAY",
+      label: "",
+    });
+
+    expect(result).toEqual({});
+    expect(prisma.companyWeekdayRule.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { weekday: 3 },
+        create: expect.objectContaining({
+          weekday: 3,
+          type: "OFFICE_DAY",
+          label: null,
+        }),
+        update: expect.objectContaining({ type: "OFFICE_DAY", label: null }),
+      }),
+    );
+  });
+
+  it("不正な曜日はエラーを返す", async () => {
+    for (const weekday of [-1, 7, 1.5]) {
+      const result = await saveWeekdayRule({
+        weekday,
+        type: "OFFICE_DAY",
+        label: "",
+      });
+      expect(result).toEqual({ error: "曜日が不正です" });
+    }
+    expect(prisma.companyWeekdayRule.upsert).not.toHaveBeenCalled();
+  });
+
+  it("不正な種別はエラーを返す", async () => {
+    const result = await saveWeekdayRule({
+      weekday: 3,
+      type: "holiday",
+      label: "",
+    });
+
+    expect(result).toEqual({ error: "種別が不正です" });
+    expect(prisma.companyWeekdayRule.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteWeekdayRule", () => {
+  it("指定曜日のルールを削除する（未登録なら何もしない）", async () => {
+    const result = await deleteWeekdayRule(3);
+
+    expect(result).toEqual({});
+    expect(prisma.companyWeekdayRule.deleteMany).toHaveBeenCalledWith({
+      where: { weekday: 3 },
+    });
+  });
+
+  it("不正な曜日はエラーを返す", async () => {
+    const result = await deleteWeekdayRule(9);
+
+    expect(result).toEqual({ error: "曜日が不正です" });
+    expect(prisma.companyWeekdayRule.deleteMany).not.toHaveBeenCalled();
   });
 });

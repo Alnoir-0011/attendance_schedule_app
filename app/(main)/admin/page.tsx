@@ -1,7 +1,11 @@
 import { AdminCompanyCalendar } from "@/components/admin-company-calendar";
 import { AdminUsers } from "@/components/admin-users";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getAdminUsers, getCompanyDays } from "@/lib/actions/admin";
+import {
+  getAdminUsers,
+  getCompanyDays,
+  getWeekdayRules,
+} from "@/lib/actions/admin";
 import { jstYearMonth } from "@/lib/date";
 import { requireAdmin } from "@/lib/session";
 
@@ -13,9 +17,10 @@ export default async function AdminPage() {
   const session = await requireAdmin();
 
   const { year, month } = jstYearMonth();
-  const [users, companyDays] = await Promise.all([
+  const [users, companyDays, weekdayRules] = await Promise.all([
     getAdminUsers(),
     getCompanyDays(year, month),
+    getWeekdayRules(),
   ]);
 
   return (
@@ -35,6 +40,7 @@ export default async function AdminPage() {
             initialYear={year}
             initialMonth={month}
             initialDays={companyDays}
+            initialRules={weekdayRules}
           />
         </TabsContent>
       </Tabs>

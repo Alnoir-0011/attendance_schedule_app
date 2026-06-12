@@ -73,6 +73,8 @@ Better Auth 管理テーブル（`user` / `session` / `account` / `verification`
   - **ユニーク制約 `(userId, date)`**（同一日の重複登録を防止）
 - **CompanyDay**（会社カレンダー: 出社日 / 休日マスタ）
   - `date`(unique), `type`: `OFFICE_DAY | HOLIDAY`, `label`(nullable), `createdAt`, `updatedAt`
+- **CompanyWeekdayRule**（会社カレンダーの曜日ルール: 毎週◯曜＝出社日/休日）
+  - `weekday`(unique・0=日〜6=土・JS の getUTCDay 準拠), `type`, `label`(nullable)
 
 日付の扱い:
 
@@ -161,8 +163,15 @@ npx prisma generate         # クライアント生成（npm install 時に post
 - パスワード再設定は `auth.api.setUserPassword` ＋ **`auth.api.revokeUserSessions` で対象ユーザーの既存セッションを失効**させる。
 - **自分自身のロールを MEMBER に降格することは禁止**（`validateRoleChange`。管理者不在の防止）。他ユーザーの昇格・降格は可。
 - 入力検証（氏名 50 文字・メール形式・パスワード 8 文字以上・上限交通費 0 以上の整数・ラベル 50 文字）は `lib/admin.ts` の純関数。
-- 会社カレンダーは同一日 upsert（上書き）・削除は deleteMany（未登録なら何もしない）。
+- 会社カレンダーは同一日 upsert（上書き）・削除は deleteMany（未登録なら何もしない）。曜日ルール（`CompanyWeekdayRule`）も同一曜日 upsert / deleteMany で同様。
 - ユーザー削除機能は MVP スコープ外。E2E で作成したユーザーは**残置を許容**する（メールはタイムスタンプ入りで衝突回避。シードの全削除→再投入で消える）。
+
+## 会社カレンダーのマージ（祝日・曜日ルール）
+
+- カレンダーに表示する会社カレンダーは `getCalendarData` 内で **個別指定（CompanyDay）＞ 祝日 ＞ 曜日ルール** の優先順位でマージする（純関数 `lib/company-calendar.ts` の `mergeCompanyDays`。クライアントは従来どおり `CompanyDayItem[]` を受け取るだけ）。
+- 祝日は `japanese-holidays`（計算ベース・外部通信なし・DB 保存なし）で算出し、休日（祝日名ラベル付き）として表示する。出社登録時の警告も既存の休日と同様に適用される。
+  - **注意**: CoffeeScript 生成の UMD モジュールのため **named import は不可**（Vitest では動くが Next.js 実行時に失敗する）。`import * as JapaneseHolidays from "japanese-holidays"` の namespace import を使うこと（ラッパー `lib/holidays.ts` 経由で使う）。
+- 管理画面の月別一覧は従来どおり個別指定のみを表示する（祝日・曜日ルールは展開表示しない）。
 
 ## カレンダー（FullCalendar）
 
@@ -212,6 +221,7 @@ npx prisma generate         # クライアント生成（npm install 時に post
 - `transportCostLimit` が未設定（0）のユーザーはアラート判定の対象外（警告を表示しない）。
 - 交通費の算出・アラート判定・JST 当月範囲は `lib/transport-cost.ts` の純関数（ユニットテスト対象）。`transportCostLimit` の編集は管理者のみ（#7）で、プロフィールでは表示のみ。
 - E2E の `profile.spec.ts` は同一ユーザーの設定を書き換えるため**ファイル内直列実行**（`test.describe.configure({ mode: "serial" })`）。日付は 27日 を使用（カレンダー E2E の 20・25・26日 と分担）。
-- E2E の `admin.spec.ts` も同一ユーザーを追加→編集→パスワード再設定と連続検証するため**ファイル内直列実行**。休日テストの日付は **21日** を使用（20・25・26・27日 と分担）。
+- E2E の `admin.spec.ts` も同一ユーザーを追加→編集→パスワード再設定と連続検証するため**ファイル内直列実行**。休日テストの日付は **21日**、曜日ルールテストは **7日**（どの月でも日本の祝日にならない日）を使用（20・25・26・27日 と分担）。祝日表示の E2E は当月に祝日があるとは限らないため**翌年1月（元日）まで月送り**して検証する。
+- E2E でカレンダーのセルをクリックして「登録済みかどうか」で分岐する場合は、**先にデータ取得完了を待つ**こと（シードで常に存在する登録が表示されるのを待つ。取得前にクリックすると未登録扱いのダイアログが開き、取消が漏れる）。
 - 「テスト作成」の指示時はテストコードのみを生成する（実装コードは含めない）。
 - 不要になったバックグラウンドプロセス（dev サーバー等）は終了させる。

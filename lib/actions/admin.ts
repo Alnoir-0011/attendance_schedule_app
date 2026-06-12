@@ -18,6 +18,7 @@ import {
 } from "@/lib/admin";
 import { type CompanyDayItem } from "@/lib/attendance";
 import { auth } from "@/lib/auth";
+import { isWeekday, type WeekdayRuleItem } from "@/lib/company-calendar";
 import { parseDateString, toDateString } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
@@ -266,6 +267,71 @@ export async function deleteCompanyDay(
   }
 
   await prisma.companyDay.deleteMany({ where: { date } });
+
+  revalidatePath("/admin");
+  return {};
+}
+
+// 曜日ルール一覧（管理画面用）
+export async function getWeekdayRules(): Promise<WeekdayRuleItem[]> {
+  await requireAdmin();
+
+  const rules = await prisma.companyWeekdayRule.findMany({
+    orderBy: { weekday: "asc" },
+    select: { weekday: true, type: true, label: true },
+  });
+  return rules;
+}
+
+export type WeekdayRuleInput = {
+  weekday: number;
+  type: string;
+  label: string;
+};
+
+// 曜日ルールの追加・更新（同一曜日は上書き）
+export async function saveWeekdayRule(
+  input: WeekdayRuleInput,
+): Promise<AdminActionResult> {
+  await requireAdmin();
+
+  if (!isWeekday(input.weekday)) {
+    return { error: "曜日が不正です" };
+  }
+  if (!isCompanyDayType(input.type)) {
+    return { error: "種別が不正です" };
+  }
+  const trimmedLabel = input.label.trim();
+  const labelError = validateCompanyDayLabel(trimmedLabel);
+  if (labelError) {
+    return { error: labelError };
+  }
+
+  const data = {
+    type: input.type as CompanyDayType,
+    label: trimmedLabel === "" ? null : trimmedLabel,
+  };
+  await prisma.companyWeekdayRule.upsert({
+    where: { weekday: input.weekday },
+    create: { weekday: input.weekday, ...data },
+    update: data,
+  });
+
+  revalidatePath("/admin");
+  return {};
+}
+
+// 曜日ルールの削除（未登録の場合は何もしない）
+export async function deleteWeekdayRule(
+  weekday: number,
+): Promise<AdminActionResult> {
+  await requireAdmin();
+
+  if (!isWeekday(weekday)) {
+    return { error: "曜日が不正です" };
+  }
+
+  await prisma.companyWeekdayRule.deleteMany({ where: { weekday } });
 
   revalidatePath("/admin");
   return {};

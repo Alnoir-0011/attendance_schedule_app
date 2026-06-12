@@ -123,6 +123,19 @@ model AttendanceDay {
   @@map("attendance_day")
 }
 
+// 会社カレンダーの曜日ルール（毎週◯曜＝出社日/休日。個別指定・祝日より優先度は低い）
+
+model CompanyWeekdayRule {
+  id        String         @id @default(cuid())
+  weekday   Int            @unique // 0=日〜6=土（JS の getUTCDay 準拠）
+  type      CompanyDayType
+  label     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@map("company_weekday_rule")
+}
+
 // 会社カレンダー（出社日 / 休日マスタ）
 
 model CompanyDay {
