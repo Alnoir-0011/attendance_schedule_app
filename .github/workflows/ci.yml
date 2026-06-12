@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint・フォーマットチェック
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: 依存関係のインストール
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: フォーマットチェック
+        run: npm run format:check
+
+  unit-test:
+    name: ユニットテスト
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: 依存関係のインストール
+        run: npm ci
+
+      - name: ユニットテスト
+        run: npm run test
+
+  build:
+    name: 本番ビルド
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: 依存関係のインストール
+        run: npm ci
+
+      - name: 本番ビルド
+        run: npm run build
+
+      - name: ビルド成果物をアップロード
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: |
+            .next
+            !.next/cache
+          include-hidden-files: true
+          retention-days: 1
+
+  e2e:
+    name: E2E テスト
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: 依存関係のインストール
+        run: npm ci
+
+      - name: ビルド成果物をダウンロード
+        uses: actions/download-artifact@v4
+        with:
+          name: next-build
+          path: .next
+
+      - name: Playwright ブラウザのインストール
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E テスト（本番ビルドを使用）
+        run: npm run test:e2e
+
+      - name: 失敗時に E2E の成果物を保存
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
