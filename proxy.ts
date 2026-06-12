@@ -13,9 +13,11 @@ export function proxy(request: NextRequest) {
   if (!sessionCookie && !isLoginPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
-  if (sessionCookie && isLoginPage) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
+  // 注意: 「Cookie があれば /login → / へ戻す」を proxy でやってはいけない。
+  // Cookie の存在はセッションの有効性を保証しないため、無効な Cookie が残っていると
+  // サーバー側ガード（/ → /login）との間で無限リダイレクトループになる。
+  // ログイン済みユーザーを /login から戻す処理は、セッションを検証できる
+  // ログインページ（app/(auth)/login/page.tsx）側で行う。
   return NextResponse.next();
 }
 
