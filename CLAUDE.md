@@ -2,8 +2,8 @@
 
 このファイルは本リポジトリで作業する Claude Code への開発指針です。
 
-> 注: 本プロジェクトはまだ雛形作成前です。記述は確定済みの設計方針に基づきます。
-> アプリ雛形を作成したら、実際のディレクトリ構成・コマンド・依存バージョンを反映して本ファイルを更新してください。
+> 注: 雛形（Next.js 16 / React 19 / Tailwind v4 / shadcn/ui / Vitest 4 / Playwright）は作成済み。
+> Node.js は **22.11.0**（`.node-version` で固定。nodenv 管理）。
 
 ## プロジェクト概要
 
@@ -19,15 +19,15 @@
 
 ## 技術スタック
 
-| 領域 | 採用 |
-|------|------|
+| 領域           | 採用                                           |
+| -------------- | ---------------------------------------------- |
 | フレームワーク | Next.js（App Router / TypeScript）フルスタック |
-| DB / ORM | PostgreSQL + Prisma |
-| 認証 | Better Auth（メール + パスワード） |
-| カレンダーUI | FullCalendar |
-| スタイリング | Tailwind CSS + shadcn/ui |
-| テスト | Vitest（ユニット）+ Playwright（E2E） |
-| デプロイ | Vercel |
+| DB / ORM       | PostgreSQL + Prisma                            |
+| 認証           | Better Auth（メール + パスワード）             |
+| カレンダーUI   | FullCalendar                                   |
+| スタイリング   | Tailwind CSS + shadcn/ui                       |
+| テスト         | Vitest（ユニット）+ Playwright（E2E）          |
+| デプロイ       | Vercel                                         |
 
 サーバー処理は **Server Actions** を基本とし、必要に応じて Route Handler（`app/api/...`）を併用する。
 
@@ -54,6 +54,7 @@
 - 交通費アラートの通知（MVP はアプリ内表示のみ）
 - OAuth（Google / Slack）ログイン
 - パスワードリセットの自己フロー（MVP は管理者による再設定で代替）
+- ダークモード切替（shadcn/ui 由来の `.dark` 用 CSS 変数は定義済みだが、切替手段は未実装）
 
 ## データモデル（概要）
 
@@ -92,15 +93,43 @@ prisma/
 middleware.ts        # 認証 / admin ガード
 ```
 
-## 開発コマンド（雛形作成後に確定）
+## 開発コマンド
 
 ```bash
 npm run dev                 # 開発サーバー起動
+npm run build               # 本番ビルド
+npm run lint                # Lint（ESLint）
+npm run test                # ユニットテスト（Vitest・1回実行）
+npm run test:watch          # ユニットテスト（watch）
+npm run test:e2e            # E2E テスト（Playwright・chromium）
+npm run format              # Prettier 整形
+npm run format:check        # Prettier チェック
+```
+
+Prisma 系コマンド（#2 で導入予定）:
+
+```bash
 npx prisma migrate dev      # マイグレーション
 npx prisma db seed          # シード投入
 npx prisma studio           # データ確認
-npm run lint                # Lint
 ```
+
+注意点:
+
+- Vitest の設定は `vitest.config.mts`（**拡張子 `.mts` 必須**。`package.json` に `"type": "module"` がないため、`.ts` だと CJS 読み込みになり ESM 専用依存（std-env 4）で起動エラーになる）。
+- ユニットテストは `**/*.test.{ts,tsx}`（`e2e/` は除外）、E2E は `e2e/**/*.spec.ts` に配置する。
+- React コンポーネントのユニットテスト環境（jsdom / `@testing-library/react` 等）は**未導入**。コンポーネントテストを書く際は先にこれらを導入し、`vitest.config.mts` に `environment` を設定すること。
+- Playwright は chromium のみ・`reporter: "list"`（HTML レポートサーバーを自動起動しない）。`webServer` 設定により `npm run test:e2e` だけで dev サーバーが起動・終了する。
+
+## CI（GitHub Actions）
+
+`.github/workflows/ci.yml` で main への push と Pull Request 時に以下を実行する:
+
+1. `npm run lint` / `npm run format:check` / `npm run test`（ユニット）
+2. `npm run build`（本番ビルド）
+3. `npm run test:e2e`（Playwright・chromium。失敗時は `test-results/` をアーティファクトとして保存）
+
+Node のバージョンは `.node-version` を参照する。CI を通らない変更はマージしない。
 
 ## 規約・注意点
 
