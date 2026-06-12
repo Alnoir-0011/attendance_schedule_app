@@ -45,6 +45,37 @@ jobs:
       - name: ユニットテスト
         run: npm run test
 
+  db-test:
+    name: DB 統合テスト
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # 共有のテスト用 DB（Neon test ブランチ）を使うため、同時実行を直列化する
+    concurrency:
+      group: db-test
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: 依存関係のインストール
+        run: npm ci
+
+      - name: .env.test を作成
+        run: |
+          {
+            echo "DATABASE_URL=\"${{ secrets.TEST_DATABASE_URL }}\""
+            echo "DIRECT_URL=\"${{ secrets.TEST_DIRECT_URL }}\""
+            echo "BETTER_AUTH_SECRET=\"ci-db-test-only-secret-0123456789abcdef0123456789abcdef\""
+            echo "BETTER_AUTH_URL=\"http://localhost:3000\""
+          } > .env.test
+
+      - name: DB 統合テスト
+        run: npm run test:db
+
   build:
     name: 本番ビルド
     runs-on: ubuntu-latest

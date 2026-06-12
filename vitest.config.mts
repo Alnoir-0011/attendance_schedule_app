@@ -12,6 +12,7 @@ export default defineConfig({
   },
   test: {
     include: ["**/*.test.{ts,tsx}"],
-    exclude: ["node_modules", ".next", "e2e"],
+    // tests/db は DB 接続が必要な統合テストのため通常実行から除外（npm run test:db で実行）
+    exclude: ["node_modules", ".next", "e2e", "tests/db", "lib/generated"],
   },
 });

@@ -67,10 +67,10 @@ Better Auth 管理テーブル（`user` / `session` / `account` / `verification`
   - `transportCostLimit`: int（個人ごとの月次上限・管理者設定）
   - `notifyEmail` / `notifySlack`: boolean（保持のみ）
 - **AttendanceDay**（出社表明）
-  - `userId`(FK), `date`, `comment`(nullable), `createdAt`
+  - `userId`(FK), `date`, `comment`(nullable), `createdAt`, `updatedAt`
   - **ユニーク制約 `(userId, date)`**（同一日の重複登録を防止）
 - **CompanyDay**（会社カレンダー: 出社日 / 休日マスタ）
-  - `date`(unique), `type`: `OFFICE_DAY | HOLIDAY`, `label`(nullable)
+  - `date`(unique), `type`: `OFFICE_DAY | HOLIDAY`, `label`(nullable), `createdAt`, `updatedAt`
 
 日付の扱い:
 
@@ -99,19 +99,21 @@ middleware.ts        # 認証 / admin ガード
 npm run dev                 # 開発サーバー起動
 npm run build               # 本番ビルド
 npm run lint                # Lint（ESLint）
-npm run test                # ユニットテスト（Vitest・1回実行）
+npm run test                # ユニットテスト（Vitest・1回実行。DB 不要）
 npm run test:watch          # ユニットテスト（watch）
+npm run test:db             # DB 統合テスト（.env.test の DB に migrate deploy してから実行）
 npm run test:e2e            # E2E テスト（Playwright・chromium）
 npm run format              # Prettier 整形
 npm run format:check        # Prettier チェック
 ```
 
-Prisma 系コマンド（#2 で導入予定）:
+Prisma 系コマンド:
 
 ```bash
-npx prisma migrate dev      # マイグレーション
-npx prisma db seed          # シード投入
+npx prisma migrate dev      # マイグレーション（開発用 DB に適用）
+npx prisma db seed          # シード投入（admin 1名 + member 3名、当月の出社予定・会社カレンダー）
 npx prisma studio           # データ確認
+npx prisma generate         # クライアント生成（npm install 時に postinstall で自動実行）
 ```
 
 注意点:
@@ -121,18 +123,29 @@ npx prisma studio           # データ確認
 - React コンポーネントのユニットテスト環境（jsdom / `@testing-library/react` 等）は**未導入**。コンポーネントテストを書く際は先にこれらを導入し、`vitest.config.mts` に `environment` を設定すること。
 - Playwright は chromium のみ・`reporter: "list"`（HTML レポートサーバーを自動起動しない）。`webServer` 設定により `npm run test:e2e` だけでサーバーが起動・終了する（ローカルは `npm run dev`、CI ではビルド済みの `npm run start` を使用）。
 
+## DB（Neon + Prisma）
+
+- Neon プロジェクト: `attendance_schedule_app-db`（Vercel 連携の組織配下）。開発用は `main` ブランチ、テスト用は `test` ブランチ。
+- `.env` に開発用、`.env.test` にテスト用の接続情報を置く（どちらも gitignore 対象。キーは `.env.example` 参照）。`DATABASE_URL` はプーラー経由、`DIRECT_URL` は直接接続（マイグレーション用）。
+- Prisma クライアントは `lib/generated/prisma` に生成される（gitignore 対象。`postinstall` で自動生成）。アプリからは `lib/prisma.ts` の `prisma` を使う。
+- DB 統合テストは `tests/db/` に置き、`npm run test:db` で実行する（`npm run test` からは除外。直列実行・タイムアウト長め）。
+- シードは Better Auth の API（`auth.api.signUpEmail`）経由でユーザーを作成するため、シードユーザーで実際にログインできる（メール: `admin@example.com` / `member1〜3@example.com`、パスワードは `prisma/seed.ts` の `SEED_PASSWORD`）。シードは全削除→再投入の冪等動作。
+
 ## CI（GitHub Actions）
 
-`.github/workflows/ci.yml` で main への push と Pull Request 時に、以下の4ジョブを実行する:
+`.github/workflows/ci.yml` で main への push と Pull Request 時に、以下の5ジョブを実行する:
 
 | ジョブ      | 内容                                                                                      |
 | ----------- | ----------------------------------------------------------------------------------------- |
 | `lint`      | `npm run lint` / `npm run format:check`                                                   |
 | `unit-test` | `npm run test`（Vitest）                                                                  |
+| `db-test`   | `npm run test:db`。Secrets から `.env.test` を生成し、Neon の test ブランチに接続         |
 | `build`     | `npm run build`。`.next`（cache 除く）をアーティファクト `next-build` としてアップロード  |
 | `e2e`       | `build` に依存。`next-build` をダウンロードし `next start` 起動で `npm run test:e2e` 実行 |
 
-- `lint` / `unit-test` / `build` は並列実行。`e2e` のみ `build` 完了後に実行される。
+- `lint` / `unit-test` / `db-test` / `build` は並列実行。`e2e` のみ `build` 完了後に実行される。
+- `db-test` は共有のテスト用 DB を使うため `concurrency: db-test` で**ワークフロー実行間でも直列化**される（連続 push 時、間に挟まれた待機中ジョブはキャンセルされることがある）。
+- 必要な Secrets: `TEST_DATABASE_URL` / `TEST_DIRECT_URL`（Neon test ブランチの接続文字列）。
 - E2E 失敗時は `test-results/` がアーティファクトとして保存される。
 - Node のバージョンは `.node-version` を参照する。CI を通らない変更はマージしない。
 
