@@ -1,12 +1,13 @@
+import { AttendanceCalendar } from "@/components/attendance-calendar";
 import { requireAuth } from "@/lib/session";
 
-export default async function Home() {
-  await requireAuth();
+export default async function CalendarPage() {
+  const session = await requireAuth();
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-4">
-      <h1 className="text-3xl font-bold">出社予定カレンダー</h1>
-      <p className="text-muted-foreground">カレンダーは #5 で実装します。</p>
+    <main className="mx-auto w-full max-w-5xl flex-1 p-4">
+      <h1 className="mb-4 text-2xl font-bold">出社予定カレンダー</h1>
+      <AttendanceCalendar currentUserId={session.user.id} />
     </main>
   );
 }

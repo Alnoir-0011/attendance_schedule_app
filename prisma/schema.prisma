@@ -105,6 +105,9 @@ model AttendanceDay {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   date      DateTime @db.Date
   comment   String?  @db.VarChar(100)
+  // 出社・退社の予定時刻（"HH:mm"・30分刻み・各々任意。検証はアプリ層で行う）
+  startTime String?  @db.VarChar(5)
+  endTime   String?  @db.VarChar(5)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -50,4 +50,41 @@ describe("AttendanceDay の (userId, date) ユニーク制約", () => {
 
     expect(created.userId).toBe(TEST_USER_ID);
   });
+
+  it("upsert なら同一日の再登録は内容更新になり重複しない", async () => {
+    const where = {
+      userId_date: { userId: TEST_USER_ID, date: targetDate },
+    };
+    await prisma.attendanceDay.upsert({
+      where,
+      create: {
+        userId: TEST_USER_ID,
+        date: targetDate,
+        comment: "1回目",
+        startTime: "09:00",
+        endTime: "17:30",
+      },
+      update: { comment: "1回目", startTime: "09:00", endTime: "17:30" },
+    });
+    // 2回目は退社時刻を外す（部分的な内容変更が正しく上書きされること）
+    await prisma.attendanceDay.upsert({
+      where,
+      create: {
+        userId: TEST_USER_ID,
+        date: targetDate,
+        comment: "2回目",
+        startTime: "10:00",
+        endTime: null,
+      },
+      update: { comment: "2回目", startTime: "10:00", endTime: null },
+    });
+
+    const rows = await prisma.attendanceDay.findMany({
+      where: { userId: TEST_USER_ID, date: targetDate },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].comment).toBe("2回目");
+    expect(rows[0].startTime).toBe("10:00");
+    expect(rows[0].endTime).toBeNull();
+  });
 });

@@ -99,20 +99,38 @@ export async function seed() {
     return found.id;
   };
 
-  // 当月（JST）のサンプル出社予定
+  // 当月（JST）のサンプル出社予定（時刻は "HH:mm"・30分刻み・任意）
   // 注意: day は月によって存在しない日付（29〜31）を使わないこと（28 以下のみ）
   const { year, month } = jstYearMonth();
-  const attendance = [
-    { email: "admin@example.com", day: 2, comment: "定例MTGのため出社" },
+  const attendance: {
+    email: string;
+    day: number;
+    comment: string | null;
+    startTime?: string;
+    endTime?: string;
+  }[] = [
+    {
+      email: "admin@example.com",
+      day: 2,
+      comment: "定例MTGのため出社",
+      startTime: "09:00",
+      endTime: "17:30",
+    },
     { email: "admin@example.com", day: 9, comment: null },
     { email: "admin@example.com", day: 16, comment: "鍵開けます" },
-    { email: "member1@example.com", day: 2, comment: "ランチ行きましょう" },
+    {
+      email: "member1@example.com",
+      day: 2,
+      comment: "ランチ行きましょう",
+      startTime: "11:30",
+    },
     { email: "member1@example.com", day: 9, comment: "午後から出社" },
     { email: "member1@example.com", day: 24, comment: null },
     {
       email: "member2@example.com",
       day: 9,
       comment: "相談したいことがあります",
+      endTime: "16:00",
     },
     { email: "member3@example.com", day: 16, comment: "初出社です" },
   ];
@@ -121,6 +139,8 @@ export async function seed() {
       userId: byEmail(a.email),
       date: dateOf(year, month, a.day),
       comment: a.comment,
+      startTime: a.startTime ?? null,
+      endTime: a.endTime ?? null,
     })),
   });
 
