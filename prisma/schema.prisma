@@ -39,6 +39,11 @@ model User {
   notifyEmail        Boolean @default(false)
   notifySlack        Boolean @default(false)
 
+  // Better Auth admin プラグイン必須フィールド（BAN 機能は MVP では未使用）
+  banned     Boolean?  @default(false)
+  banReason  String?
+  banExpires DateTime?
+
   sessions       Session[]
   accounts       Account[]
   attendanceDays AttendanceDay[]
@@ -57,6 +62,9 @@ model Session {
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Better Auth admin プラグイン必須フィールド（なりすまし機能は MVP では未使用）
+  impersonatedBy String?
 
   @@unique([token])
   @@map("session")

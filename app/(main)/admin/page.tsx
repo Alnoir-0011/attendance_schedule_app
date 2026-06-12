@@ -1,3 +1,8 @@
+import { AdminCompanyCalendar } from "@/components/admin-company-calendar";
+import { AdminUsers } from "@/components/admin-users";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getAdminUsers, getCompanyDays } from "@/lib/actions/admin";
+import { jstYearMonth } from "@/lib/date";
 import { requireAdmin } from "@/lib/session";
 
 export const metadata = {
@@ -5,14 +10,34 @@ export const metadata = {
 };
 
 export default async function AdminPage() {
-  await requireAdmin();
+  const session = await requireAdmin();
+
+  const { year, month } = jstYearMonth();
+  const [users, companyDays] = await Promise.all([
+    getAdminUsers(),
+    getCompanyDays(year, month),
+  ]);
 
   return (
-    <main className="flex flex-1 flex-col gap-4 p-8">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 p-4">
       <h1 className="text-2xl font-bold">管理画面</h1>
-      <p className="text-muted-foreground">
-        ユーザー管理・会社カレンダーの指定は #7 で実装します。
-      </p>
+
+      <Tabs defaultValue="users">
+        <TabsList>
+          <TabsTrigger value="users">ユーザー管理</TabsTrigger>
+          <TabsTrigger value="calendar">会社カレンダー</TabsTrigger>
+        </TabsList>
+        <TabsContent value="users">
+          <AdminUsers users={users} currentUserId={session.user.id} />
+        </TabsContent>
+        <TabsContent value="calendar">
+          <AdminCompanyCalendar
+            initialYear={year}
+            initialMonth={month}
+            initialDays={companyDays}
+          />
+        </TabsContent>
+      </Tabs>
     </main>
   );
 }

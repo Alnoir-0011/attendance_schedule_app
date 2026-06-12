@@ -6,27 +6,13 @@ import {
   type AttendanceItem,
   type CompanyDayItem,
 } from "@/lib/attendance";
+import { parseDateString, toDateString } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/session";
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 // FullCalendar の月表示は最大6週（42日）。それを超える取得は不正とみなす
 const MAX_RANGE_DAYS = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-// "YYYY-MM-DD" を @db.Date と同じ意味（UTC 0時）の Date に変換する
-function parseDateString(dateStr: string): Date | null {
-  if (!DATE_PATTERN.test(dateStr)) return null;
-  const date = new Date(`${dateStr}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  // "2026-02-30" → 3月2日 のような繰り上がりを弾く（往復で一致することを確認）
-  if (toDateString(date) !== dateStr) return null;
-  return date;
-}
-
-function toDateString(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
 
 export type CalendarData = {
   attendances: AttendanceItem[];

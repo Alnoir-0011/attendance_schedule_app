@@ -66,6 +66,8 @@ Better Auth 管理テーブル（`user` / `session` / `account` / `verification`
   - `dailyTransportCost`: int（1日あたり交通費・円）
   - `transportCostLimit`: int（個人ごとの月次上限・管理者設定）
   - `notifyEmail` / `notifySlack`: boolean（保持のみ）
+  - `banned` / `banReason` / `banExpires`: Better Auth admin プラグインの必須フィールド（BAN 機能は MVP では未使用）
+- **Session** には同じく admin プラグイン必須の `impersonatedBy` を持つ（なりすまし機能は未使用）
 - **AttendanceDay**（出社表明）
   - `userId`(FK), `date`, `comment`(nullable), `createdAt`, `updatedAt`
   - **ユニーク制約 `(userId, date)`**（同一日の重複登録を防止）
@@ -90,11 +92,15 @@ app/                 # App Router（ページ・Server Actions）
 components/
   app-header.tsx     # 共通ヘッダー（ブランド・ナビ・ユーザー名・ログアウト）
   nav-links.tsx      # ナビリンク（client。usePathname でアクティブ表示、admin リンクの出し分け）
+  admin-users.tsx    # 管理画面: ユーザー管理タブ（client。追加/編集/パスワード再設定ダイアログ）
+  admin-company-calendar.tsx # 管理画面: 会社カレンダータブ（client。月送り・追加・削除）
   ui/                # shadcn/ui 生成物
-lib/auth.ts          # Better Auth 設定
+lib/auth.ts          # Better Auth 設定（admin プラグイン含む）
 lib/session.ts       # セッション取得・認証ガード（getSession / requireAuth / requireAdmin）
 lib/authz.ts         # 権限判定（isAdmin）
-lib/actions/         # 共通 Server Actions（login / logout など）
+lib/admin.ts         # 管理画面の入力検証の純関数（ユニットテスト対象）
+lib/date.ts          # "YYYY-MM-DD" ⇔ @db.Date 変換・JST 年月の純関数
+lib/actions/         # 共通 Server Actions（login / logout / admin など）
 lib/                 # 共通ユーティリティ（交通費集計など）
 prisma/
   schema.prisma
@@ -145,6 +151,18 @@ npx prisma generate         # クライアント生成（npm install 時に post
 - 権限判定ロジックは `lib/authz.ts`（`isAdmin`）に置き、ユニットテスト対象にする。
 - リダイレクト先は固定パスのみ。**「ログイン後に元のページへ戻す」（`?next=` 等）を実装する場合は、オープンリダイレクト防止のためサーバー側で遷移先を必ず検証する**こと。
 - アプリ独自の `/api/` ルートハンドラを追加する場合は、proxy 任せにせず**ハンドラ自身でサーバー側の認証チェックを行う**こと（proxy の除外対象は `/api/auth/` 配下のみ）。
+- **admin プラグイン**（`better-auth/plugins`）を使用。アプリの Prisma enum（`ADMIN`/`MEMBER`）をアクセスコントロール（`createAccessControl`）でロール登録し、`adminRoles: ["ADMIN"]` / `defaultRole: "MEMBER"` を設定。`role` は admin プラグインが管理するため `additionalFields` に定義しない。
+
+## 管理画面（/admin）
+
+- `app/(main)/admin/page.tsx`（`requireAdmin`）＋ タブ2枚: ユーザー管理（`components/admin-users.tsx`）/ 会社カレンダー（`components/admin-company-calendar.tsx`）。
+- Server Action は `lib/actions/admin.ts`。**全 Action の先頭で `requireAdmin()` を呼ぶ**（member 拒否はユニットテスト `lib/actions/admin.test.ts` で担保）。
+- ユーザー追加は `auth.api.createUser`（admin プラグイン・`headers` 必須）→ `additionalFields` は `input: false` のため `prisma.user.update` で後から設定（シードと同パターン）。`emailVerified` は true にする。
+- パスワード再設定は `auth.api.setUserPassword` ＋ **`auth.api.revokeUserSessions` で対象ユーザーの既存セッションを失効**させる。
+- **自分自身のロールを MEMBER に降格することは禁止**（`validateRoleChange`。管理者不在の防止）。他ユーザーの昇格・降格は可。
+- 入力検証（氏名 50 文字・メール形式・パスワード 8 文字以上・上限交通費 0 以上の整数・ラベル 50 文字）は `lib/admin.ts` の純関数。
+- 会社カレンダーは同一日 upsert（上書き）・削除は deleteMany（未登録なら何もしない）。
+- ユーザー削除機能は MVP スコープ外。E2E で作成したユーザーは**残置を許容**する（メールはタイムスタンプ入りで衝突回避。シードの全削除→再投入で消える）。
 
 ## カレンダー（FullCalendar）
 
@@ -194,5 +212,6 @@ npx prisma generate         # クライアント生成（npm install 時に post
 - `transportCostLimit` が未設定（0）のユーザーはアラート判定の対象外（警告を表示しない）。
 - 交通費の算出・アラート判定・JST 当月範囲は `lib/transport-cost.ts` の純関数（ユニットテスト対象）。`transportCostLimit` の編集は管理者のみ（#7）で、プロフィールでは表示のみ。
 - E2E の `profile.spec.ts` は同一ユーザーの設定を書き換えるため**ファイル内直列実行**（`test.describe.configure({ mode: "serial" })`）。日付は 27日 を使用（カレンダー E2E の 20・25・26日 と分担）。
+- E2E の `admin.spec.ts` も同一ユーザーを追加→編集→パスワード再設定と連続検証するため**ファイル内直列実行**。休日テストの日付は **21日** を使用（20・25・26・27日 と分担）。
 - 「テスト作成」の指示時はテストコードのみを生成する（実装コードは含めない）。
 - 不要になったバックグラウンドプロセス（dev サーバー等）は終了させる。

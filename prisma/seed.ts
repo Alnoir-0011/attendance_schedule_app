@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import { auth } from "../lib/auth";
+import { jstYearMonth } from "../lib/date";
 import { prisma } from "../lib/prisma";
 import type { Role } from "../lib/generated/prisma/enums";
 
@@ -49,12 +50,6 @@ export const seedUsers: SeedUser[] = [
     transportCostLimit: 0,
   },
 ];
-
-// JST 基準の今日の年月を返す
-function jstYearMonth(): { year: number; month: number } {
-  const jstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  return { year: jstNow.getUTCFullYear(), month: jstNow.getUTCMonth() + 1 };
-}
 
 // タイムゾーンを持たない日付（@db.Date）として保存される値を作る
 function dateOf(year: number, month: number, day: number): Date {
