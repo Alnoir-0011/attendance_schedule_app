@@ -142,6 +142,7 @@ npx prisma generate         # クライアント生成（npm install 時に post
 
 - Neon プロジェクト: `attendance_schedule_app-db`（Vercel 連携の組織配下）。開発用は `main` ブランチ、テスト用は `test` ブランチ。
 - `.env` に開発用、`.env.test` にテスト用の接続情報を置く（どちらも gitignore 対象。キーは `.env.example` 参照）。`DATABASE_URL` はプーラー経由、`DIRECT_URL` は直接接続（マイグレーション用）。
+- 接続文字列には **`connect_timeout=15` を必ず付与**する。Neon 無料枠はアイドル時にコンピュートがサスペンドされ、コールドスタートがデフォルトタイムアウト（5秒）を超えて `P1001` になることがある（GitHub Secrets 側も同様）。
 - Prisma クライアントは `lib/generated/prisma` に生成される（gitignore 対象。`postinstall` で自動生成）。アプリからは `lib/prisma.ts` の `prisma` を使う。
 - DB 統合テストは `tests/db/` に置き、`npm run test:db` で実行する（`npm run test` からは除外。直列実行・タイムアウト長め）。
 - シードは Better Auth の API（`auth.api.signUpEmail`）経由でユーザーを作成するため、シードユーザーで実際にログインできる（メール: `admin@example.com` / `member1〜3@example.com`、パスワードは `prisma/seed.ts` の `SEED_PASSWORD`）。シードは全削除→再投入の冪等動作。
