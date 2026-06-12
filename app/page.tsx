@@ -1,13 +1,21 @@
 import { Button } from "@/components/ui/button";
+import { logout } from "@/lib/actions/auth";
+import { requireAuth } from "@/lib/session";
 
-export default function Home() {
+export default async function Home() {
+  const session = await requireAuth();
+
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-4">
       <h1 className="text-3xl font-bold">出社予定カレンダー</h1>
       <p className="text-muted-foreground">
-        誰がいつ出社するかをカレンダーで共有するアプリ
+        {session.user.name} さんとしてログイン中（カレンダーは #5 で実装）
       </p>
-      <Button>はじめる</Button>
+      <form action={logout}>
+        <Button type="submit" variant="outline">
+          ログアウト
+        </Button>
+      </form>
     </main>
   );
 }

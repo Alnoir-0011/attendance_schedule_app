@@ -1,13 +1,14 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { nextCookies } from "better-auth/next-js";
 
 import { prisma } from "./prisma";
 
-// Better Auth 設定（最小構成。本格的な認証実装は #3 で行う）
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  baseURL: process.env.BETTER_AUTH_URL,
   emailAndPassword: {
     enabled: true,
   },
@@ -45,4 +46,6 @@ export const auth = betterAuth({
       },
     },
   },
+  // Server Actions から signIn/signOut した際に Set-Cookie を反映する（必ず最後に置く）
+  plugins: [nextCookies()],
 });

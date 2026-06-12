@@ -81,16 +81,20 @@ Better Auth 管理テーブル（`user` / `session` / `account` / `verification`
 
 ```
 app/                 # App Router（ページ・Server Actions）
-  (auth)/login/
+  (auth)/login/      # ログインページ
+  api/auth/[...all]/ # Better Auth のルートハンドラ
   page.tsx           # ダッシュボード兼カレンダー
   profile/
   admin/
 lib/auth.ts          # Better Auth 設定
-lib/                 # 共通ユーティリティ（権限判定・交通費集計など）
+lib/session.ts       # セッション取得・認証ガード（getSession / requireAuth / requireAdmin）
+lib/authz.ts         # 権限判定（isAdmin）
+lib/actions/         # 共通 Server Actions（login / logout など）
+lib/                 # 共通ユーティリティ（交通費集計など）
 prisma/
   schema.prisma
   seed.ts
-middleware.ts        # 認証 / admin ガード
+proxy.ts             # 認証ガード（Next.js 16 では middleware.ts でなく proxy.ts）
 ```
 
 ## 開発コマンド
@@ -122,11 +126,23 @@ npx prisma generate         # クライアント生成（npm install 時に post
 - ユニットテストは `**/*.test.{ts,tsx}`（`e2e/` は除外）、E2E は `e2e/**/*.spec.ts` に配置する。
 - React コンポーネントのユニットテスト環境（jsdom / `@testing-library/react` 等）は**未導入**。コンポーネントテストを書く際は先にこれらを導入し、`vitest.config.mts` に `environment` を設定すること。
 - Playwright は chromium のみ・`reporter: "list"`（HTML レポートサーバーを自動起動しない）。`webServer` 設定により `npm run test:e2e` だけでサーバーが起動・終了する（ローカルは `npm run dev`、CI ではビルド済みの `npm run start` を使用）。
+- E2E はシードユーザーでログインするため、**ローカル実行前に `npx prisma db seed` で開発用 DB をシード済みにしておく**こと。
+
+## 認証（Better Auth）
+
+- `lib/auth.ts` が本体設定。Server Actions から signIn/signOut するため **`nextCookies()` プラグインを必ず plugins の最後に置く**。
+- ログイン/ログアウトは `lib/actions/auth.ts` の Server Action（`auth.api.signInEmail` / `signOut`）で行う。クライアント SDK は未使用。
+- サーバー側ガードは `lib/session.ts`: `requireAuth()`（未認証→`/login`）/ `requireAdmin()`（ADMIN 以外→`/`）。React の `cache()` でリクエスト内メモ化済み。
+- `proxy.ts`（Next.js 16 の命名。旧 middleware.ts は非推奨。<https://nextjs.org/docs/app/api-reference/file-conventions/proxy> 参照）は **Cookie の有無による楽観的ガードのみ**。ロール判定・改ざん検証はサーバー側ガードが担う。ログイン済みで `/login` に来た場合は `/` へ戻す。
+- 権限判定ロジックは `lib/authz.ts`（`isAdmin`）に置き、ユニットテスト対象にする。
+- リダイレクト先は固定パスのみ。**「ログイン後に元のページへ戻す」（`?next=` 等）を実装する場合は、オープンリダイレクト防止のためサーバー側で遷移先を必ず検証する**こと。
+- アプリ独自の `/api/` ルートハンドラを追加する場合は、proxy 任せにせず**ハンドラ自身でサーバー側の認証チェックを行う**こと（proxy の除外対象は `/api/auth/` 配下のみ）。
 
 ## DB（Neon + Prisma）
 
 - Neon プロジェクト: `attendance_schedule_app-db`（Vercel 連携の組織配下）。開発用は `main` ブランチ、テスト用は `test` ブランチ。
 - `.env` に開発用、`.env.test` にテスト用の接続情報を置く（どちらも gitignore 対象。キーは `.env.example` 参照）。`DATABASE_URL` はプーラー経由、`DIRECT_URL` は直接接続（マイグレーション用）。
+- 接続文字列には **`connect_timeout=15` を必ず付与**する。Neon 無料枠はアイドル時にコンピュートがサスペンドされ、コールドスタートがデフォルトタイムアウト（5秒）を超えて `P1001` になることがある（GitHub Secrets 側も同様）。
 - Prisma クライアントは `lib/generated/prisma` に生成される（gitignore 対象。`postinstall` で自動生成）。アプリからは `lib/prisma.ts` の `prisma` を使う。
 - DB 統合テストは `tests/db/` に置き、`npm run test:db` で実行する（`npm run test` からは除外。直列実行・タイムアウト長め）。
 - シードは Better Auth の API（`auth.api.signUpEmail`）経由でユーザーを作成するため、シードユーザーで実際にログインできる（メール: `admin@example.com` / `member1〜3@example.com`、パスワードは `prisma/seed.ts` の `SEED_PASSWORD`）。シードは全削除→再投入の冪等動作。
@@ -135,17 +151,17 @@ npx prisma generate         # クライアント生成（npm install 時に post
 
 `.github/workflows/ci.yml` で main への push と Pull Request 時に、以下の5ジョブを実行する:
 
-| ジョブ      | 内容                                                                                      |
-| ----------- | ----------------------------------------------------------------------------------------- |
-| `lint`      | `npm run lint` / `npm run format:check`                                                   |
-| `unit-test` | `npm run test`（Vitest）                                                                  |
-| `db-test`   | `npm run test:db`。Secrets から `.env.test` を生成し、Neon の test ブランチに接続         |
-| `build`     | `npm run build`。`.next`（cache 除く）をアーティファクト `next-build` としてアップロード  |
-| `e2e`       | `build` に依存。`next-build` をダウンロードし `next start` 起動で `npm run test:e2e` 実行 |
+| ジョブ      | 内容                                                                                                  |
+| ----------- | ----------------------------------------------------------------------------------------------------- |
+| `lint`      | `npm run lint` / `npm run format:check`                                                               |
+| `unit-test` | `npm run test`（Vitest）                                                                              |
+| `db-test`   | `npm run test:db`。Secrets から `.env.test` を生成し、Neon の test ブランチに接続                     |
+| `build`     | `npm run build`。`.next`（cache 除く）をアーティファクト `next-build` としてアップロード              |
+| `e2e`       | `build` に依存。Neon の e2e ブランチに migrate + seed 後、`next start` 起動で `npm run test:e2e` 実行 |
 
 - `lint` / `unit-test` / `db-test` / `build` は並列実行。`e2e` のみ `build` 完了後に実行される。
-- `db-test` は共有のテスト用 DB を使うため `concurrency: db-test` で**ワークフロー実行間でも直列化**される（連続 push 時、間に挟まれた待機中ジョブはキャンセルされることがある）。
-- 必要な Secrets: `TEST_DATABASE_URL` / `TEST_DIRECT_URL`（Neon test ブランチの接続文字列）。
+- `db-test` / `e2e` は共有 DB を使うため、それぞれ `concurrency: db-test` / `concurrency: e2e-db` で**ワークフロー実行間でも直列化**される（連続 push 時、間に挟まれた待機中ジョブはキャンセルされることがある）。
+- 必要な Secrets: `TEST_DATABASE_URL` / `TEST_DIRECT_URL`（Neon test ブランチ）、`E2E_DATABASE_URL` / `E2E_DIRECT_URL`（Neon e2e ブランチ）。
 - E2E 失敗時は `test-results/` がアーティファクトとして保存される。
 - Node のバージョンは `.node-version` を参照する。CI を通らない変更はマージしない。
 
