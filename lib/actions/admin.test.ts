@@ -1,3 +1,4 @@
+import { APIError } from "better-auth/api";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -25,6 +26,7 @@ vi.mock("@/lib/prisma", () => ({
     user: {
       findMany: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
     },
     companyDay: {
       findMany: vi.fn(),
@@ -175,6 +177,42 @@ describe("createUser", () => {
     });
     expect(auth.api.createUser).not.toHaveBeenCalled();
   });
+
+  it("メールアドレスが重複している場合はエラーを返す", async () => {
+    vi.mocked(auth.api.createUser).mockRejectedValueOnce(
+      new APIError("UNPROCESSABLE_ENTITY", {
+        code: "USER_ALREADY_EXISTS",
+        message: "User already exists",
+      }),
+    );
+
+    const result = await createUser({
+      ...validUserInput,
+      password: "password1234",
+    });
+
+    expect(result).toEqual({
+      error: "このメールアドレスは既に使用されています",
+    });
+  });
+
+  it("追加フィールドの更新に失敗した場合は作成したユーザーを削除してエラーを返す", async () => {
+    vi.mocked(auth.api.createUser).mockResolvedValue({
+      user: { id: "new-1" },
+    } as never);
+    vi.mocked(prisma.user.update).mockRejectedValueOnce(new Error("DB error"));
+
+    const result = await createUser({
+      ...validUserInput,
+      password: "password1234",
+    });
+
+    expect(result).toEqual({ error: "ユーザーを作成できませんでした" });
+    // 中途半端なユーザーが残ると再試行が重複エラーで詰まるため削除する
+    expect(prisma.user.delete).toHaveBeenCalledWith({
+      where: { id: "new-1" },
+    });
+  });
 });
 
 describe("updateUser", () => {
@@ -213,7 +251,7 @@ describe("updateUser", () => {
   });
 
   it("メールアドレスが重複している場合はエラーを返す", async () => {
-    vi.mocked(prisma.user.update).mockRejectedValue(
+    vi.mocked(prisma.user.update).mockRejectedValueOnce(
       Object.assign(new Error("Unique constraint failed"), { code: "P2002" }),
     );
 
@@ -253,6 +291,37 @@ describe("resetUserPassword", () => {
     });
     expect(auth.api.setUserPassword).not.toHaveBeenCalled();
     expect(auth.api.revokeUserSessions).not.toHaveBeenCalled();
+  });
+
+  it("自分自身への再設定ではセッションを失効させない（操作中の管理者の締め出し防止）", async () => {
+    const result = await resetUserPassword("admin-1", "newpass1234");
+
+    expect(result).toEqual({});
+    expect(auth.api.setUserPassword).toHaveBeenCalled();
+    expect(auth.api.revokeUserSessions).not.toHaveBeenCalled();
+  });
+
+  it("Better Auth がエラーを返した場合はエラーメッセージを返す", async () => {
+    vi.mocked(auth.api.setUserPassword).mockRejectedValueOnce(
+      new APIError("BAD_REQUEST", { message: "User not found" }),
+    );
+
+    const result = await resetUserPassword("user-1", "newpass1234");
+
+    expect(result).toEqual({ error: "パスワードを再設定できませんでした" });
+    expect(auth.api.revokeUserSessions).not.toHaveBeenCalled();
+  });
+});
+
+describe("getCompanyDays", () => {
+  it("不正な年（範囲外）はエラーを投げる", async () => {
+    vi.mocked(prisma.companyDay.findMany).mockResolvedValue([]);
+
+    await expect(getCompanyDays(1999, 6)).rejects.toThrow("不正な年月です");
+    await expect(getCompanyDays(2101, 6)).rejects.toThrow("不正な年月です");
+    expect(prisma.companyDay.findMany).not.toHaveBeenCalled();
+
+    await expect(getCompanyDays(2026, 6)).resolves.toEqual([]);
   });
 });
 

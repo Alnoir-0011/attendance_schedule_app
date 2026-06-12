@@ -44,7 +44,8 @@ export type UserInput = {
   transportCostLimit: number;
 };
 
-// ユーザー入力（氏名・メール・ロール・上限交通費）の共通検証
+// ユーザー入力（氏名・メール・ロール・上限交通費）の共通検証。
+// 各 validate 関数は「成功 = null / 失敗 = エラーメッセージ」を返す規約のため ?? で連結できる
 function validateUserInput(input: UserInput): string | null {
   return (
     validateUserName(input.name) ??
@@ -97,23 +98,30 @@ export async function createUser(
     createdUserId = created.user.id;
   } catch (e) {
     if (e instanceof APIError) {
-      return {
-        error: "ユーザーを作成できませんでした（メールアドレスの重複など）",
-      };
+      if (e.body?.code === "USER_ALREADY_EXISTS") {
+        return { error: "このメールアドレスは既に使用されています" };
+      }
+      return { error: "ユーザーを作成できませんでした" };
     }
     throw e;
   }
 
   // additionalFields は input: false のため作成後に更新する（シードと同パターン）。
   // 管理者が作成するユーザーのためメール確認は済みとして扱う
-  await prisma.user.update({
-    where: { id: createdUserId },
-    data: {
-      hasKey: input.hasKey,
-      transportCostLimit: input.transportCostLimit,
-      emailVerified: true,
-    },
-  });
+  try {
+    await prisma.user.update({
+      where: { id: createdUserId },
+      data: {
+        hasKey: input.hasKey,
+        transportCostLimit: input.transportCostLimit,
+        emailVerified: true,
+      },
+    });
+  } catch {
+    // 中途半端なユーザーが残ると再試行がメール重複で詰まるため、作成分を取り消す
+    await prisma.user.delete({ where: { id: createdUserId } });
+    return { error: "ユーザーを作成できませんでした" };
+  }
 
   revalidatePath("/admin");
   return {};
@@ -140,6 +148,8 @@ export async function updateUser(
   }
 
   try {
+    // メール変更時も emailVerified は維持する（自由サインアップなし・管理者が確認済みとして
+    // 登録する運用のため。自己パスワードリセット等を導入する際は再検証を検討すること）
     await prisma.user.update({
       where: { id: userId },
       data: {
@@ -162,12 +172,14 @@ export async function updateUser(
   return {};
 }
 
-// パスワード再設定（管理者による）。再設定後は対象ユーザーの既存セッションを失効させる
+// パスワード再設定（管理者による）。再設定後は対象ユーザーの既存セッションを失効させる。
+// ただし自分自身への再設定では失効させない（操作中の管理者が締め出されるのを防ぐ。
+// MVP では管理者が自分のパスワードを変える唯一の手段のため自己対象も許可する）
 export async function resetUserPassword(
   userId: string,
   newPassword: string,
 ): Promise<AdminActionResult> {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   const error = validatePassword(newPassword);
   if (error) {
@@ -175,14 +187,23 @@ export async function resetUserPassword(
   }
 
   const requestHeaders = await headers();
-  await auth.api.setUserPassword({
-    body: { userId, newPassword },
-    headers: requestHeaders,
-  });
-  await auth.api.revokeUserSessions({
-    body: { userId },
-    headers: requestHeaders,
-  });
+  try {
+    await auth.api.setUserPassword({
+      body: { userId, newPassword },
+      headers: requestHeaders,
+    });
+    if (userId !== session.user.id) {
+      await auth.api.revokeUserSessions({
+        body: { userId },
+        headers: requestHeaders,
+      });
+    }
+  } catch (e) {
+    if (e instanceof APIError) {
+      return { error: "パスワードを再設定できませんでした" };
+    }
+    throw e;
+  }
 
   return {};
 }
@@ -196,6 +217,8 @@ export async function getCompanyDays(
 
   if (
     !Number.isInteger(year) ||
+    year < 2000 ||
+    year > 2100 ||
     !Number.isInteger(month) ||
     month < 1 ||
     month > 12

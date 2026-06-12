@@ -39,6 +39,7 @@ async function gotoAdminTab(
 }
 
 // テストの成否に関わらず、追加した休日・曜日ルールが残っていれば削除して復元する
+// （正常終了時は各テスト本体内で削除済み。ここは途中失敗時のフォールバック）
 test.afterAll(async ({ browser }) => {
   const page = await browser.newPage();
   await loginAndWait(page, ADMIN);

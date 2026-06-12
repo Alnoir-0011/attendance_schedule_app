@@ -29,5 +29,6 @@ export function listHolidaysInRange(
       }
     }
   }
+  // ライブラリの返す順序に依存せず、末尾のソートで日付順を保証する
   return holidays.sort((a, b) => a.date.localeCompare(b.date));
 }

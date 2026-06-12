@@ -149,21 +149,25 @@ function UserFormDialog({
     };
 
     setIsPending(true);
-    const result =
-      mode === "create"
-        ? await createUser({
-            ...input,
-            password: String(formData.get("password") ?? ""),
-          })
-        : await updateUser(user!.id, input);
-    setIsPending(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
     setError(null);
-    onClose();
+    try {
+      const result =
+        mode === "create"
+          ? await createUser({
+              ...input,
+              password: String(formData.get("password") ?? ""),
+            })
+          : await updateUser(user!.id, input);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      onClose();
+    } catch {
+      setError("操作に失敗しました");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
@@ -291,18 +295,22 @@ function PasswordResetDialog({
     const formData = new FormData(event.currentTarget);
 
     setIsPending(true);
-    const result = await resetUserPassword(
-      user.id,
-      String(formData.get("newPassword") ?? ""),
-    );
-    setIsPending(false);
-
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
     setError(null);
-    onClose();
+    try {
+      const result = await resetUserPassword(
+        user.id,
+        String(formData.get("newPassword") ?? ""),
+      );
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      onClose();
+    } catch {
+      setError("操作に失敗しました");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (

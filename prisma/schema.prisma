@@ -129,7 +129,7 @@ model CompanyWeekdayRule {
   id        String         @id @default(cuid())
   weekday   Int            @unique // 0=日〜6=土（JS の getUTCDay 準拠）
   type      CompanyDayType
-  label     String?
+  label     String?        @db.VarChar(50)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
@@ -142,7 +142,7 @@ model CompanyDay {
   id        String         @id @default(cuid())
   date      DateTime       @unique @db.Date
   type      CompanyDayType
-  label     String?
+  label     String?        @db.VarChar(50)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 

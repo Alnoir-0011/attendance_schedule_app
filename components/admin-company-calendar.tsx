@@ -51,10 +51,16 @@ export function AdminCompanyCalendar({
     const nextYear = moved.getUTCFullYear();
     const nextMonth = moved.getUTCMonth() + 1;
     setIsPending(true);
-    setDays(await getCompanyDays(nextYear, nextMonth));
-    setIsPending(false);
-    setYear(nextYear);
-    setMonth(nextMonth);
+    setError(null);
+    try {
+      setDays(await getCompanyDays(nextYear, nextMonth));
+      setYear(nextYear);
+      setMonth(nextMonth);
+    } catch {
+      setError("データの取得に失敗しました");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   async function refresh() {
@@ -67,33 +73,41 @@ export function AdminCompanyCalendar({
     const formData = new FormData(form);
 
     setIsPending(true);
-    const result = await saveCompanyDay({
-      date: String(formData.get("date") ?? ""),
-      type: String(formData.get("type") ?? ""),
-      label: String(formData.get("label") ?? ""),
-    });
-    if (result.error) {
-      setIsPending(false);
-      setError(result.error);
-      return;
-    }
-    await refresh();
-    setIsPending(false);
     setError(null);
-    form.reset();
+    try {
+      const result = await saveCompanyDay({
+        date: String(formData.get("date") ?? ""),
+        type: String(formData.get("type") ?? ""),
+        label: String(formData.get("label") ?? ""),
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      await refresh();
+      form.reset();
+    } catch {
+      setError("操作に失敗しました");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   async function handleDelete(date: string) {
     setIsPending(true);
-    const result = await deleteCompanyDay(date);
-    if (result.error) {
-      setIsPending(false);
-      setError(result.error);
-      return;
-    }
-    await refresh();
-    setIsPending(false);
     setError(null);
+    try {
+      const result = await deleteCompanyDay(date);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      await refresh();
+    } catch {
+      setError("操作に失敗しました");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (
@@ -248,33 +262,41 @@ function WeekdayRuleSection({
     const formData = new FormData(form);
 
     setIsPending(true);
-    const result = await saveWeekdayRule({
-      weekday: Number(formData.get("weekday") ?? -1),
-      type: String(formData.get("type") ?? ""),
-      label: String(formData.get("label") ?? ""),
-    });
-    if (result.error) {
-      setIsPending(false);
-      setError(result.error);
-      return;
-    }
-    setRules(await getWeekdayRules());
-    setIsPending(false);
     setError(null);
-    form.reset();
+    try {
+      const result = await saveWeekdayRule({
+        weekday: Number(formData.get("weekday") ?? -1),
+        type: String(formData.get("type") ?? ""),
+        label: String(formData.get("label") ?? ""),
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setRules(await getWeekdayRules());
+      form.reset();
+    } catch {
+      setError("操作に失敗しました");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   async function handleDelete(weekday: number) {
     setIsPending(true);
-    const result = await deleteWeekdayRule(weekday);
-    if (result.error) {
-      setIsPending(false);
-      setError(result.error);
-      return;
-    }
-    setRules(await getWeekdayRules());
-    setIsPending(false);
     setError(null);
+    try {
+      const result = await deleteWeekdayRule(weekday);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setRules(await getWeekdayRules());
+    } catch {
+      setError("操作に失敗しました");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (

@@ -60,6 +60,7 @@ export async function seed() {
   // 冪等にするため既存データを全削除（依存順）
   await prisma.attendanceDay.deleteMany();
   await prisma.companyDay.deleteMany();
+  await prisma.companyWeekdayRule.deleteMany();
   await prisma.session.deleteMany();
   await prisma.account.deleteMany();
   await prisma.verification.deleteMany();

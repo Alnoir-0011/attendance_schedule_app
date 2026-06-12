@@ -14,6 +14,8 @@ export const metadata = {
 };
 
 export default async function AdminPage() {
+  // 各 Action（getAdminUsers 等）も内部で requireAdmin を呼ぶが、ページ自体のガードとして
+  // ここでも明示する（多層防御。getSession は cache() 済みのため DB アクセスは増えない）
   const session = await requireAdmin();
 
   const { year, month } = jstYearMonth();
