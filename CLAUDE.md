@@ -191,5 +191,7 @@ npx prisma generate         # クライアント生成（npm install 時に post
 - 休日（`CompanyDay` の `HOLIDAY`）への出社登録は**警告を表示したうえで許可**する（登録自体は可能）。
 - 交通費サマリは「当月の出社登録日数 × `dailyTransportCost`」で算出し、`transportCostLimit` の **80%（暫定）を超えた場合**にアラート表示する（**80% ちょうどでは表示しない**）。
 - `transportCostLimit` が未設定（0）のユーザーはアラート判定の対象外（警告を表示しない）。
+- 交通費の算出・アラート判定・JST 当月範囲は `lib/transport-cost.ts` の純関数（ユニットテスト対象）。`transportCostLimit` の編集は管理者のみ（#7）で、プロフィールでは表示のみ。
+- E2E の `profile.spec.ts` は同一ユーザーの設定を書き換えるため**ファイル内直列実行**（`test.describe.configure({ mode: "serial" })`）。日付は 27日 を使用（カレンダー E2E の 20・25・26日 と分担）。
 - 「テスト作成」の指示時はテストコードのみを生成する（実装コードは含めない）。
 - 不要になったバックグラウンドプロセス（dev サーバー等）は終了させる。
