@@ -81,11 +81,16 @@ Better Auth 管理テーブル（`user` / `session` / `account` / `verification`
 
 ```
 app/                 # App Router（ページ・Server Actions）
-  (auth)/login/      # ログインページ
+  (auth)/login/      # ログインページ（ヘッダーなし）
+  (main)/            # 認証済みページ群（layout.tsx で共通ヘッダーを表示）
+    page.tsx         # ダッシュボード兼カレンダー
+    profile/
+    admin/
   api/auth/[...all]/ # Better Auth のルートハンドラ
-  page.tsx           # ダッシュボード兼カレンダー
-  profile/
-  admin/
+components/
+  app-header.tsx     # 共通ヘッダー（ブランド・ナビ・ユーザー名・ログアウト）
+  nav-links.tsx      # ナビリンク（client。usePathname でアクティブ表示、admin リンクの出し分け）
+  ui/                # shadcn/ui 生成物
 lib/auth.ts          # Better Auth 設定
 lib/session.ts       # セッション取得・認証ガード（getSession / requireAuth / requireAdmin）
 lib/authz.ts         # 権限判定（isAdmin）
@@ -96,6 +101,8 @@ prisma/
   seed.ts
 proxy.ts             # 認証ガード（Next.js 16 では middleware.ts でなく proxy.ts）
 ```
+
+- `(main)` レイアウトの session チェックはヘッダー表示用。**各ページの `requireAuth` / `requireAdmin` は省略しない**（レイアウトはナビゲーション時に再実行されないため、ガードとして信頼しない）。
 
 ## 開発コマンド
 
