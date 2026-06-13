@@ -40,6 +40,12 @@ test.afterAll(async ({ browser }) => {
   const page = await browser.newPage();
   await loginAndWait(page, MEMBER);
 
+  // カレンダーのデータ取得完了を待つ（シードで常に存在する 9日 の自分の登録で判定）。
+  // 取得前にセルをクリックすると「未登録」扱いのダイアログが開き、取消が漏れる
+  await expect(
+    page.locator(`[data-date="${jstDateString(9)}"]`).getByText("在宅 次郎"),
+  ).toBeVisible();
+
   // 追加登録した出社日が残っていれば取消す
   const cell = page.locator(
     `[data-date="${jstDateString(EXTRA_ATTENDANCE_DAY)}"]`,
